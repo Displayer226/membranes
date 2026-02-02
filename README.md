@@ -219,7 +219,7 @@ MIT License — see [LICENSE](LICENSE)
 
 ## Credits
 
-Created by **Cosmo** 🫧 & **Ryan** as part of the OpenClaw ecosystem.
+Created by **Cosmo** 🫧 & **RT Max** as part of the OpenClaw ecosystem.
 
 Born from real-world experience with prompt injection attacks and the need to protect AI agents processing untrusted content.
 
