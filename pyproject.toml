@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "membranes"
+version = "0.1.0"
+description = "Prompt injection defense for AI agents"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Cosmo & Ryan", email = "hello@membranes.dev"}
+]
+keywords = [
+    "ai", "llm", "prompt-injection", "security", "agents",
+    "defense", "sanitization", "chatgpt", "claude", "safety"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+]
+llm = [
+    "transformers>=4.30",
+    "torch>=2.0",
+]
+
+[project.scripts]
+membranes = "membranes.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/membranes/membranes"
+Documentation = "https://membranes.dev/docs"
+Repository = "https://github.com/membranes/membranes"
+Issues = "https://github.com/membranes/membranes/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+membranes = ["../patterns/*.yaml"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "N"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
