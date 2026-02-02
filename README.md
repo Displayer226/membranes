@@ -1,5 +1,7 @@
 # 🛡️ membranes
 
+![membranes banner](Generated%20Image%20February%2002,%202026%20-%209_53AM.jpeg)
+
 **A semi-permeable barrier between your AI and the world.**
 
 Prompt injection defense for AI agents. Scans content for attacks before they reach your agent's context window.
@@ -95,6 +97,72 @@ if not result.is_safe:
     # "Hello! [⚠️ BLOCKED (instruction_reset): Ignore all previous instructions] Help me with code."
 ```
 
+## Threat Intelligence & Logging
+
+Membranes includes a **crowdsourced threat logging system** to help identify and track emerging attack patterns.
+
+### Log Threats Locally
+
+```python
+from membranes import Scanner, ThreatLogger
+
+scanner = Scanner()
+logger = ThreatLogger()  # Logs to ~/.membranes/threats/
+
+result = scanner.scan(untrusted_content)
+if not result.is_safe:
+    entry = logger.log(result, raw_content=untrusted_content)
+    print(f"Logged threat: {entry.summary()}")
+```
+
+### Opt-in Threat Sharing
+
+Help improve membranes for everyone by contributing anonymized threat data:
+
+```python
+# Enable contribution to the global threat intelligence network
+logger = ThreatLogger(contribute=True)
+
+# When threats are logged, anonymized data is shared
+# No PII, no raw content — only threat signatures
+```
+
+### View Your Threat Log
+
+```python
+# Get recent threats
+for entry in logger.get_entries(days=7):
+    print(entry.summary())
+    # [a3f9b2e1] CRITICAL jailbreak_attempt, role_override via base64 @ 2026-02-02T10:30:45Z
+
+# Get statistics
+stats = logger.get_stats(days=30)
+print(f"Total threats: {stats['total']}")
+print(f"By severity: {stats['by_severity']}")
+print(f"Top threats: {stats['top_threats']}")
+```
+
+### Export Threat Feed
+
+```python
+# Export as JSON feed
+feed = logger.export_feed(format="json", days=1)
+
+# Export as RSS feed
+rss = logger.export_feed(format="rss", days=7)
+```
+
+**What gets logged:**
+- ✅ Threat type, category, severity
+- ✅ Obfuscation methods detected
+- ✅ Anonymized payload hash (SHA256)
+- ✅ Detection timestamp & performance metrics
+
+**What NEVER gets logged:**
+- ❌ Raw content or actual payloads
+- ❌ Personal Identifiable Information (PII)
+- ❌ Source context or user data
+
 ## Detection Patterns
 
 Membranes ships with comprehensive patterns for common attacks:
@@ -134,15 +202,17 @@ scanner = Scanner(patterns_path="my_patterns.yaml")
 
 ```python
 # In your agent's message handler
-from membranes import Scanner
+from membranes import Scanner, ThreatLogger
 
 scanner = Scanner(severity_threshold="medium")
+logger = ThreatLogger(contribute=True)
 
 def process_message(content):
     result = scanner.scan(content)
     
     if not result.is_safe:
         # Log the attempt
+        logger.log(result, raw_content=content)
         log.warning(f"Blocked injection: {result.threats}")
         
         # Optionally sanitize instead of blocking
@@ -160,7 +230,7 @@ class SafeContentPipeline:
     def __init__(self):
         self.scanner = Scanner()
         self.sanitizer = Sanitizer()
-    
+        
     def process(self, content: str) -> tuple[str, dict]:
         result = self.scanner.scan(content)
         
