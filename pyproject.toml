@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "membranes"
 version = "0.1.0"
-description = "Prompt injection defense for AI agents"
+description = "The VirusTotal for prompt injection — open-source defense with crowdsourced threat intelligence for AI agents"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -13,11 +13,15 @@ authors = [
 ]
 keywords = [
     "ai", "llm", "prompt-injection", "security", "agents",
-    "defense", "sanitization", "chatgpt", "claude", "safety"
+    "defense", "sanitization", "chatgpt", "claude", "safety",
+    "cybersecurity", "threat-intelligence", "ai-safety",
+    "llm-security", "guardrails", "content-filtering"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -25,8 +29,11 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
 ]
 requires-python = ">=3.9"
 dependencies = [
@@ -49,10 +56,11 @@ llm = [
 membranes = "membranes.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/membranes/membranes"
-Documentation = "https://membranes.dev/docs"
-Repository = "https://github.com/membranes/membranes"
-Issues = "https://github.com/membranes/membranes/issues"
+Homepage = "https://github.com/thebearwithabite/membranes"
+Documentation = "https://github.com/thebearwithabite/membranes#-quick-start"
+Repository = "https://github.com/thebearwithabite/membranes"
+Issues = "https://github.com/thebearwithabite/membranes/issues"
+Changelog = "https://github.com/thebearwithabite/membranes/releases"
 
 [tool.setuptools.packages.find]
 where = ["src"]
