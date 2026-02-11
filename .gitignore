@@ -49,3 +49,4 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+PATTERN_ANALYSIS_REPORT.md

@@ -9,3 +9,4 @@ __Long-term Hardening__
 - Implement regex complexity analysis tool
 - Add continuous performance benchmarks
 - Consider using RE2 (Google's regex engine) which doesn't backtrack
+- context aware filtering
