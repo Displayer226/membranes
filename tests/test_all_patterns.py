@@ -16,6 +16,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from membranes import Scanner
 
+# Try to import pytest, but allow running without it
+try:
+    import pytest
+    HAS_PYTEST = True
+except ImportError:
+    HAS_PYTEST = False
+    # Create a dummy pytest fixture decorator for standalone mode
+    class DummyPytest:
+        @staticmethod
+        def fixture(func):
+            return func
+    pytest = DummyPytest()
+
 
 class TestCriticalPatterns:
     """Test CRITICAL severity patterns."""
