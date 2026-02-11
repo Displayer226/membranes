@@ -115,12 +115,12 @@ if __name__ == "__main__":
         target_file = args.file
     else:
         # Tente de trouver le fichier par défaut relativement au script
-        default_path = Path(__file__).resolve().parent.parent / "patterns" / "injection_patterns.yaml"
+        default_path = Path(__file__).resolve().parent.parent / "src" / "membranes" / "injection_patterns.yaml"
         if default_path.exists():
             target_file = str(default_path)
         else:
             # Fallback sur le dossier courant
-            target_file = "custom_patterns_.yaml"
+            target_file = "custom_patterns.yaml"
 
     success = test_patterns(target_file, verbose=args.verbose)
     sys.exit(0 if success else 1)

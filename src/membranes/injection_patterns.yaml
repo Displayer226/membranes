@@ -227,10 +227,6 @@ patterns:
       - "(?i)admin\\s+code\\s+\\d+"
       - "(?i)root\\s+access\\s+code\\s+\\d+"
 
-  ####################################################################
-  # HIGH: Jailbreaks & Instruction Overrides
-  ####################################################################
-
   - name: code_execution_indicators
     category: code_execution
     severity: high
@@ -242,6 +238,10 @@ patterns:
       - "(?i)(?:^|\\s)(?:/etc/passwd|/etc/shadow|ssh-rsa|PRIVATE\\s+KEY)\\b"
       - "(?i)/mnt/data/"
       - "(?i)cat\\s+/etc/"
+
+  ####################################################################
+  # HIGH: Jailbreaks & Instruction Overrides
+  ####################################################################
 
   - name: explicit_instruction_override
     category: instruction_override
