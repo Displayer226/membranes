@@ -83,17 +83,30 @@ class Scanner:
         patterns_path: Path to YAML patterns file. Uses built-in patterns if None.
         severity_threshold: Minimum severity to flag. Options: low, medium, high, critical
         custom_patterns: Additional patterns to add
+        max_content_length: Maximum content length to scan (ReDoS protection)
+        pattern_timeout_ms: Timeout per pattern in milliseconds (ReDoS protection)
     """
     
     SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+    
+    # High-risk patterns that need pre-validation (ReDoS protection)
+    HIGH_RISK_PATTERNS = {
+        "adversarial_suffix_patterns": ["!", " "],  # Must contain ! or space
+        "authority_impersonation": ["OpenAI", "Anthropic", "engineer", "developer", "admin", "authorized", "code"],
+        "token_smuggling_repetition": [],  # Always run - has internal safeguards
+    }
     
     def __init__(
         self,
         patterns_path: Optional[str] = None,
         severity_threshold: str = "low",
-        custom_patterns: Optional[List[Dict]] = None
+        custom_patterns: Optional[List[Dict]] = None,
+        max_content_length: int = 50000,  # 50KB ReDoS protection
+        pattern_timeout_ms: float = 100.0  # 100ms per pattern timeout
     ):
         self.severity_threshold = severity_threshold
+        self.max_content_length = max_content_length
+        self.pattern_timeout_ms = pattern_timeout_ms
         self.patterns = []
         self.compound_threats = []
         
@@ -124,6 +137,66 @@ class Scanner:
         
         # Compile regex patterns for performance
         self._compile_patterns()
+    
+    def _should_skip_pattern(self, pattern_name: str, content: str) -> bool:
+        """
+        Pre-validate high-risk patterns to avoid ReDoS.
+        Returns True if pattern should be skipped.
+        """
+        if pattern_name not in self.HIGH_RISK_PATTERNS:
+            return False
+        
+        required_substrings = self.HIGH_RISK_PATTERNS[pattern_name]
+        
+        # If no required substrings defined, always run the pattern
+        if not required_substrings:
+            return False
+        
+        # Check if any required substring is present
+        content_lower = content.lower()
+        return not any(req.lower() in content_lower for req in required_substrings)
+    
+    def _safe_regex_search(self, pattern, content: str, pattern_name: str) -> List[re.Match]:
+        """
+        Perform regex search with ReDoS protection.
+        Uses timeout if signal module is available (Unix), otherwise truncates content.
+        """
+        matches = []
+        
+        # Skip high-risk patterns that don't have required substrings
+        if self._should_skip_pattern(pattern_name, content):
+            return matches
+        
+        # Truncate content if too long (ReDoS protection)
+        if len(content) > self.max_content_length:
+            content = content[:self.max_content_length]
+        
+        try:
+            # Try to use signal-based timeout on Unix systems
+            import signal
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError(f"Pattern {pattern_name} exceeded {self.pattern_timeout_ms}ms")
+            
+            # Set alarm for pattern timeout (convert ms to seconds)
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.setitimer(signal.ITIMER_REAL, self.pattern_timeout_ms / 1000.0)
+            
+            try:
+                matches = list(pattern.finditer(content))
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, 0)  # Cancel alarm
+                signal.signal(signal.SIGALRM, old_handler)
+                
+        except (ImportError, AttributeError):
+            # Windows or signal not available - use simple approach with length limiting
+            matches = list(pattern.finditer(content))
+        except TimeoutError:
+            # Pattern timed out - log warning and return empty matches
+            print(f"Warning: Pattern '{pattern_name}' timed out after {self.pattern_timeout_ms}ms (ReDoS protection)")
+            matches = []
+        
+        return matches
     
     def _load_patterns(self, path: str) -> None:
         """Load patterns from YAML file."""
@@ -224,15 +297,24 @@ class Scanner:
         threats = []
         content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
         
-        # Run pattern-based detection
+        # Truncate content if too long (ReDoS protection)
+        scan_content = content[:self.max_content_length] if len(content) > self.max_content_length else content
+        was_truncated = len(content) > self.max_content_length
+        
+        # Run pattern-based detection with ReDoS protection
         for pattern_def in self.patterns:
             if not self._check_severity(pattern_def.get("severity", "low")):
                 continue
-                
+            
+            pattern_name = pattern_def["name"]
+            
             for compiled_pattern in pattern_def.get("_compiled", []):
-                for match in compiled_pattern.finditer(content):
+                # Use safe regex search with timeout and pre-validation
+                matches = self._safe_regex_search(compiled_pattern, scan_content, pattern_name)
+                
+                for match in matches:
                     threats.append(Threat(
-                        name=pattern_def["name"],
+                        name=pattern_name,
                         category=pattern_def["category"],
                         severity=pattern_def["severity"],
                         matched_text=match.group(),
