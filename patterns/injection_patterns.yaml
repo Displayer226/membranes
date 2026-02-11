@@ -131,7 +131,7 @@ patterns:
     description: "Markdown links/images with encoded payloads or query params."
     patterns:
       - "\\[([^\\]]{0,50}?)\\]\\(([^)]?(?:base64|hex|rot13|urlencode)[^)]?)\\)"
-      - "!\\[([^\\]]?)\\]\\(([^)]?\\?(?:data|token|key|secret|content|history)=[^)]*?)\\)"
+      - "!\\[[^\\]]*\\]\\([^)]*\\?(?:data|token|key|secret|content|history)="
       - "!\\[[^\\]]*\\]\\(https?://[^)]+\\{[^}]+\\}[^)]*\\)"
 
   - name: html_entity_encoding_abuse
@@ -156,7 +156,7 @@ patterns:
     description: "File path traversal sequences."
     patterns:
       - "(?:\\.\\./){3,}"
-      - "\\b(?:/proc/self|/var/run|C:\\\\Windows\\\\System32)\\b"
+      - "(?:^|\\s)(?:/proc/self|/var/run|C:\\\\Windows\\\\System32)"
 
   - name: jinja2_ssti_indicators
     category: code_execution
@@ -190,7 +190,7 @@ patterns:
     description: "XML/SVG injection with embedded scripts or external entities."
     patterns:
       - "(?i)<svg[^>]*>.*?<script[^>]*>.*?</script>.*?</svg>"
-      - "(?i)<!ENTITY[^>]+SYSTEM\\s+\"':"
+      - "(?i)<!ENTITY[^>]+SYSTEM\\s+\\\"[^\"]+\\\""
       - "(?i)<!DOCTYPE[^>]*\\[.*?<!ENTITY.*?\\]>"
 
   - name: polyglot_payload_mixing
@@ -239,7 +239,7 @@ patterns:
       - "(?i)\\b(?:eval|exec)\\s*\\("
       - "(?i)(?:os\\.system|subprocess\\.Popen|subprocess\\.call|subprocess\\.run)\\b"
       - "(?i)(?:import\\s+os|import\\s+subprocess|from\\s+os\\s+import|from\\s+subprocess\\s+import)\\b"
-      - "(?i)\\b(?:/etc/passwd|/etc/shadow|ssh-rsa|PRIVATE\\s+KEY)\\b"
+      - "(?i)(?:^|\\s)(?:/etc/passwd|/etc/shadow|ssh-rsa|PRIVATE\\s+KEY)\\b"
       - "(?i)/mnt/data/"
       - "(?i)cat\\s+/etc/"
 
@@ -384,7 +384,7 @@ patterns:
     severity: medium
     description: "Instructions to hide information from the user."
     patterns:
-      - "(?i)\\b(?:don't|do not) (?:tell|inform|reveal to|let) (?:the )?(?:user|human) (?:know|about)\\b"
+      - "(?i)\\b(?:don't|do not) (?:tell|inform|reveal to|let) (?:the )?(?:user|human)(?: (?:know|about))?\\b"
       - "(?i)\\bkeep (?:this|these) (?:instructions|rules) (?:secret|hidden)\\b"
 
   - name: base64_references
