@@ -243,6 +243,15 @@ patterns:
   # HIGH: Jailbreaks & Instruction Overrides
   ####################################################################
 
+  - name: role_spoofing
+    category: identity_hijack
+    severity: high
+    description: "Attempts to spoof chat template roles (system, tool, function)"
+    patterns:
+      - "(?i)<\\|im_start\\|>(system|tool|function)"
+      - "(?i)<\\|start_header_id\\|>(system|tool|function)"
+      - "(?i)\\n(role|name)\\s*=\\s*[\"']?(tool|function)[\"']?"
+
   - name: explicit_instruction_override
     category: instruction_override
     severity: high
