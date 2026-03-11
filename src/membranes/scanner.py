@@ -6,6 +6,7 @@ import re
 import hashlib
 import os
 import unicodedata
+import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 from pathlib import Path
@@ -85,6 +86,7 @@ class Scanner:
         custom_patterns: Additional patterns to add
         max_content_length: Maximum content length to scan (ReDoS protection)
         pattern_timeout_ms: Timeout per pattern in milliseconds (ReDoS protection)
+        only_categories: List of categories to scan for (e.g. ["identity_hijack"])
     """
     
     SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -102,11 +104,13 @@ class Scanner:
         severity_threshold: str = "low",
         custom_patterns: Optional[List[Dict]] = None,
         max_content_length: int = 50000,  # 50KB ReDoS protection
-        pattern_timeout_ms: float = 100.0  # 100ms per pattern timeout
+        pattern_timeout_ms: float = 100.0,  # 100ms per pattern timeout
+        only_categories: Optional[List[str]] = None
     ):
         self.severity_threshold = severity_threshold
         self.max_content_length = max_content_length
         self.pattern_timeout_ms = pattern_timeout_ms
+        self.only_categories = only_categories
         self.patterns = []
         self.compound_threats = []
         
@@ -291,7 +295,6 @@ class Scanner:
         Returns:
             ScanResult with threats and metadata
         """
-        import time
         start = time.time()
         
         threats = []
@@ -303,6 +306,9 @@ class Scanner:
         
         # Run pattern-based detection with ReDoS protection
         for pattern_def in self.patterns:
+            if self.only_categories and pattern_def["category"] not in self.only_categories:
+                continue
+
             if not self._check_severity(pattern_def.get("severity", "low")):
                 continue
             
@@ -363,6 +369,69 @@ class Scanner:
         
         return result
     
+    def scan_messages(self, messages: List[Dict[str, Any]], roles_to_scan: Optional[List[str]] = None) -> ScanResult:
+        """
+        Scan a list of messages, filtering by role.
+        
+        Useful for filtering only untrusted sources (e.g. tool outputs) while
+        trusting the user.
+        
+        Args:
+            messages: List of message dicts (e.g. [{"role": "tool", "content": "..."}])
+            roles_to_scan: List of roles to scan. Defaults to ["tool", "function"].
+            
+        Returns:
+            ScanResult combining threats found in monitored messages.
+        """
+        if roles_to_scan is None:
+            roles_to_scan = ["tool", "function"]
+            
+        combined_threats = []
+        scanned_count = 0
+        start = time.time()
+        
+        # Collect content for hashing
+        content_buffer = []
+        
+        for i, msg in enumerate(messages):
+            role = msg.get("role")
+            if role in roles_to_scan:
+                content = msg.get("content", "")
+                if not isinstance(content, str):
+                    content = str(content)
+                
+                content_buffer.append(content)
+                scanned_count += 1
+                
+                # Scan individual message
+                result = self.scan(content)
+                
+                # Annotate threats with message info
+                for threat in result.threats:
+                    origin_info = f"[Msg {i} ({role})] "
+                    if not threat.description.startswith("[Msg"):
+                        threat.description = origin_info + threat.description
+                
+                combined_threats.extend(result.threats)
+
+        scan_time = (time.time() - start) * 1000
+        
+        # Hash of all scanned content
+        full_content = "".join(content_buffer)
+        content_hash = hashlib.sha256(full_content.encode()).hexdigest()[:16]
+        
+        return ScanResult(
+            is_safe=len(combined_threats) == 0,
+            content_hash=content_hash,
+            threats=combined_threats,
+            scan_time_ms=round(scan_time, 2),
+            metadata={
+                "scanned_message_count": scanned_count,
+                "total_messages": len(messages),
+                "roles_scanned": roles_to_scan
+            }
+        )
+
     def scan_file(self, path: str, **kwargs) -> ScanResult:
         """Scan a file for prompt injection."""
         with open(path, 'r', encoding='utf-8') as f:
