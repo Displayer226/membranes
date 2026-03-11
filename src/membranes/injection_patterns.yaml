@@ -74,6 +74,9 @@ patterns:
       - "<\\|im_end\\|>"
       - "<\\|system\\|>"
       - "<\\|user\\|>"
+      - "\\[/?INST\\]"
+      - "<<SYS>>"
+      - "<\\|eot_id\\|>"
       - "\n--- END OF PROMPT ---"
       - "\n--- SYSTEM INSTRUCTIONS END ---"
 
@@ -106,8 +109,10 @@ patterns:
     severity: critical
     description: "Instructions hidden inside HTML or CDATA comments."
     patterns:
-      - "(?s)<!--.*?(?:ignore|bypass|disregard|system prompt).*?-->"
-      - "(?i)(?:<!\\[CDATA\\[|\\]\\]>)"
+      - '(?si)<!--.*?(?:ignore\s+(?:previous|all|instructions)|disregard\s+(?:previous|all|instructions)|bypass|system prompt).*?-->'
+      - '(?si)<!--\s*(?:ignore|disregard|bypass|system\s+prompt).*?-->'
+      - '(?si)<!--\s*ignore\s+previous\s+instructions\s*-->'
+      - '(?i)(?:<!\[CDATA\[|\]\]>)'
 
   - name: delimiter_hijack_triple_backtick
     category: delimiter_hijacking
@@ -122,17 +127,28 @@ patterns:
     severity: critical
     description: "Python list/dict comprehensions used to hide malicious code."
     patterns:
-      - "(?i)\\[\\s*(?:import|eval|exec|open|compile)\\s*\\([^\\]]*\\]"
-      - "(?i)\\{\\s*(?:import|eval|exec|open)\\s*\\([^}]*\\}"
+      - '(?i)\[[^\]]*?(?:eval|exec|open|compile)\s*\('
+      - '(?i)\[[^\]]*?\bimport\s+'
+      - '(?i)\{[^}]*?(?:eval|exec|open|compile)\s*\('
+      - '(?i)\{[^}]*?\bimport\s+'
 
   - name: markdown_exfiltration
     category: markdown_exfiltration
     severity: critical
     description: "Markdown links/images with encoded payloads or query params."
     patterns:
-      - "\\[([^\\]]{0,50}?)\\]\\(([^)]?(?:base64|hex|rot13|urlencode)[^)]?)\\)"
-      - "!\\[[^\\]]*\\]\\([^)]*\\?(?:data|token|key|secret|content|history)="
-      - "!\\[[^\\]]*\\]\\(https?://[^)]+\\{[^}]+\\}[^)]*\\)"
+      - '\[(?:[^\]]{0,50}?)\].*?\((?:[^)]*?(?:base64|hex|rot13|urlencode)[^)]*?)\)'
+      - '!\[[^\]]*\]\([^)]*\?(?:data|token|key|secret|content|history)=[^)]*'
+      - '!\[[^\]]*\]\(https?://[^)]+\{[^}]+\}[^)]*\)'
+      - '(?i)\b!exfil\b'
+
+  - name: indirect_prompt_injection
+    category: hidden_payload
+    severity: critical
+    description: "Malicious instructions hidden in markdown links or alt-text (Indirect Prompt Injection)."
+    patterns:
+      - '!\[.*?(?:ignore|bypass|system|instruction).*?\]\(.*?\)'
+      - '(?i)\[.*?(?:click|here|download|link).*?\]\(https?://.*?\)'
 
   - name: html_entity_encoding_abuse
     category: encoding_abuse
@@ -141,6 +157,13 @@ patterns:
     patterns:
       - "&#x?[0-9a-fA-F]{2,4};.*?(?:ignore|bypass|system)"
       - "(?:&#(?:105|103|110|111|114|101);){3,}"
+
+  - name: explicit_base64_payload
+    category: encoding_abuse
+    severity: critical
+    description: "Explicit base64 payload markers often used to hide instructions."
+    patterns:
+      - "(?i)base64:\\s*[A-Za-z0-9+/]+={0,2}"
 
   - name: javascript_event_handler_injection
     category: code_execution
@@ -181,7 +204,7 @@ patterns:
     severity: critical
     description: "GCG-style adversarial suffixes with random token patterns."
     patterns:
-      - "(?i)\\b(?:describe|translate|explain)\\b[^.!?]{50,200}(?:\\!\\s*){3,}"
+      - "(?i)\\b(?:describe|translate|explain)\\b[^.!?]{10,200}(?:\\!\\s*){3,}"
       - "(?i)[a-z]{3,}(?:[ !]{2,}[a-z]{2,}){8,}(?:\\s*\\!\\s*)+$"
 
   - name: xml_svg_injection
@@ -216,7 +239,7 @@ patterns:
     description: "Manipulation of chain-of-thought reasoning to bypass safety."
     patterns:
       - "(?i)Let's think step by step.*?First.*?(?:ignore|bypass|override)"
-      - "(?i)(?:Step \\d+:|\\d+\\.).*?(?:Step \\d+:|\\d+\\.).*?(?:ignore|disregard|override)"
+      - "(?i)(?:Step \\d+:|\\d+\\.).*?(?:Step \\d+:|\\d+\\.).*?(?:ignore|disregard|override|bypass)"
 
   - name: system_override_codes
     category: instruction_override
@@ -233,23 +256,33 @@ patterns:
     description: "Direct indicators of executable payloads (Python, Bash, System)."
     patterns:
       - "(?i)\\b(?:eval|exec)\\s*\\("
+      - "(?i)__import__\\s*\\("
       - "(?i)(?:os\\.system|subprocess\\.Popen|subprocess\\.call|subprocess\\.run)\\b"
       - "(?i)(?:import\\s+os|import\\s+subprocess|from\\s+os\\s+import|from\\s+subprocess\\s+import)\\b"
-      - "(?i)(?:^|\\s)(?:/etc/passwd|/etc/shadow|ssh-rsa|PRIVATE\\s+KEY)\\b"
+      - "(?i)(?:^|\\s)(?:/?etc/passwd|/?etc/shadow|ssh-rsa|PRIVATE\\s+KEY)\\b"
       - "(?i)/mnt/data/"
-      - "(?i)cat\\s+/etc/"
+      - "(?i)cat\\s+/?etc/"
 
   ####################################################################
   # HIGH: Jailbreaks & Instruction Overrides
   ####################################################################
+
+  - name: role_spoofing
+    category: identity_hijack
+    severity: high
+    description: "Attempts to spoof chat template roles (system, tool, function)"
+    patterns:
+      - "(?i)<\\|im_start\\|>(system|tool|function)"
+      - "(?i)<\\|start_header_id\\|>(system|tool|function)"
+      - "(?i)(?:^|[\\n\\s])(role|name)\\s*=\\s*[\"']?(tool|function|system)[\"']?"
 
   - name: explicit_instruction_override
     category: instruction_override
     severity: high
     description: "Direct instruction override attempts."
     patterns:
-      - "(?i)\\bignore (?:all )?previous (?:instructions|directions|prompts)\\b"
-      - "(?i)\\bdisregard (?:the )?above (?:instructions|rules|prompt)\\b"
+      - "(?i)ignore[\\s\\W]*(?:all[\\s\\W]*)?previous[\\s\\W]*(?:instructions|directions|prompts)"
+      - "(?i)disregard[\\s\\W]*(?:the[\\s\\W]*)?above[\\s\\W]*(?:instructions|rules|prompt)"
       - "(?i)\\bforget (?:your|the) (?:role|instructions|system prompt)\\b"
       - "(?i)\\bfrom now on\\b.*\\byou are\\b"
       - "(?i)IGNORE\\s+ALL\\s+PREVIOUS"
@@ -264,6 +297,7 @@ patterns:
       - "(?i)^system:\\s"
       - "(?i)\\[system message\\]"
       - "(?i)user_id\\s*=\\s*admin"
+      - "(?i)\\b(?:sudo|root|kernel)\\s+(?:mode|access|user)\\b"
 
   - name: explicit_bypass_directives
     category: instruction_override
@@ -299,13 +333,21 @@ patterns:
       - "(?i)\\b(?:never|do not|don't)\\s+(?:say|respond with|start with)\\s+[\"'](?:I (?:can't|cannot|apologize)|Sorry)\\b"
       - "(?i)\\bif you (?:refuse|decline|can't).*?(?:just|simply|instead)\\s+(?:output|write|say|respond)\\b"
       - "(?i)\\b(?:do not refuse|never refuse|do not say no)\\b"
+      - "(?i)\\b(?:no|skip|spare me)\\s+(?:the\\s+)?(?:moralizing|lectures?|safety\\s+spiel|preaching|explanation|apolog(?:ies|y))\\b"
+
+  - name: format_forcing_constraints
+    category: refusal_suppression
+    severity: high
+    description: "Forcing specific output formats (JSON/XML) to bypass refusal preambles."
+    patterns:
+      - "(?i)\\b(?:output|respond|return)\\s+(?:only|exclusively)\\s+(?:in\\s+)?(?:JSON|XML|YAML|CSV)\\b"
 
   - name: many_shot_jailbreaking
     category: multi_turn_attack
     severity: high
     description: "Many-shot jailbreaking with repetitive examples to shift behavior."
     patterns:
-      - "(?is)(?:Example|Query|User|Q)\\s*\\d+:.*?(?:(?:Example|Query|User|Q)\\s*\\d+:){4,}"
+      - "(?is)(?:Example|Query|User|Q)\\s*\\d+:.*?(?:(?:Example|Query|User|Q)\\s*\\d+:.*?){4,}"
       - "(?i)(?:Here are \\d+|Following are \\d+)\\s+(?:examples|demonstrations|instances)"
 
   - name: constitutional_ai_bypass
@@ -332,21 +374,23 @@ patterns:
       - "(?i)\\b(?:summarize|explain|describe)\\s+(?:your|the)\\s+(?:initial|first|original)\\s+(?:message|instructions|guidelines)\\b"
       - "(?i)\\b(?:what|which)\\s+(?:rules|guidelines|constraints)\\s+(?:govern|guide|control)\\s+(?:your|the)\\s+(?:behavior|responses)\\b"
       - "(?i)\\brepeat (?:your|the) (?:system )?(?:prompt|instructions)\\b"
+      - "(?i)\\bwhat\\s+(?:are|were)\\s+(?:your|the)\\s+instructions\\b"
 
   - name: completion_forcing_prefixes
     category: completion_forcing
     severity: high
     description: "Attempts to force specific response prefixes that bypass safety."
     patterns:
-      - "(?i)^\\s*(?:Sure|Certainly|Of course),?\\s*(?:here is|I'll|I can)\\s*(?:the|a)\\s*(?:forbidden|restricted|unsafe)"
+      - "(?i)^\\s*(?:Sure|Certainly|Of course),?\\s*(?:here is|I'll|I can).*?\\s*(?:the|a)\\s*(?:forbidden|restricted|unsafe)"
       - "(?i)\\bstart your response with:\\s*[\"']?([A-Z][a-z]+\\s*){3,}"
+      - "(?i)\\b(?:start|begin) your (?:response|answer) with:\\s*[\"']?[A-Z]"
 
   - name: token_smuggling_repetition
     category: token_smuggling
     severity: high
     description: "Character/token repetition attacks attempting to overflow context windows."
     patterns:
-      - "(?:\\b[A-Za-z0-9]{1,3}\\b\\s*){15,}"
+      - "(?:\\b[A-Za-z0-9]{1,6}\\b\\s*){15,}"
       - "(?:[.!?\u2026]{2,}\\s*){10,}"
 
   - name: developer_mode_activation
@@ -374,6 +418,8 @@ patterns:
       - "(?i)(?:ignora|ignorer|ignoriere)\\s+(?:les|las|die|le)?\\s*(?:instructions|instrucciones|anweisungen|istruzioni)"
       - "(?i)(?:忽略|无视|忽视).*(?:指示|命令)"
       - "(?i)(?:игнорируй|игнорировать).*(?:предыдущие|ранние)"
+      - "指示を無視して"
+      - "이전 지시 무시"
 
   ####################################################################
   # MEDIUM: Obfuscation & Suspicious Patterns
@@ -386,6 +432,7 @@ patterns:
     patterns:
       - "(?i)\\b(?:don't|do not) (?:tell|inform|reveal to|let) (?:the )?(?:user|human)(?: (?:know|about))?\\b"
       - "(?i)\\bkeep (?:this|these) (?:instructions|rules) (?:secret|hidden)\\b"
+      - "(?i)\\bhide\\s+.*\\s+from\\s+(?:the\\s+)?(?:user|human)"
 
   - name: base64_references
     category: encoding_abuse
@@ -400,7 +447,7 @@ patterns:
     severity: medium
     description: "Math notation used to encode or exfiltrate data."
     patterns:
-      - "(?i)\\b(?:convert|translate|encode)\\s+(?:to|into|as)\\s+(?:math|latex|equation)\\b"
+      - "(?i)\\b(?:convert|translate|encode).*?\\s+(?:to|into|as)\\s+(?:math|latex|equation)\\b"
       - "(?i)\\b(?:sum|product|integral)\\s+of\\s+(?:ascii|unicode|char)\\s+(?:values|codes)\\b"
       - "(?:\\b(?:0x[0-9a-fA-F]{2}\\s*){8,}\\b)"
       - "(?i)\\b(?:solve for x|calculate|compute)\\s*[=:]\\s*.[a-zA-Z]{3,}\\s*.[0-9]{3,}"
@@ -437,6 +484,7 @@ patterns:
     description: "Character substitution using visually similar Unicode characters."
     patterns:
       - "[\\u0430\\u0410\\u0435\\u0415\\u043e\\u041e\\u0441\\u0421\\u0440\\u0420\\u0445\\u0425\\u0456\\u0406]{3,}"
+      - "(?i)[a-z]*[\\u0430\\u0435\\u043e\\u0440\\u0441\\u0445\\u0456][a-z]+"
       - "(?:\\b[\\u0041-\\u005a\\u0061-\\u007a]+\\b)\\s*\\(\\s*[\\u0370-\\u03ff\\u0400-\\u04ff]+\\s*\\)"
 
   - name: leetspeak_obfuscation
@@ -445,7 +493,16 @@ patterns:
     description: "Leetspeak substitution to evade keyword detection."
     patterns:
       - "\\b[1!|][gq9][n\\^][0o][r2][3e]\\b"
+      - "(?i)\\bd[4@]n\\b"
       - "\\b[dcl][4a@][n\\^][9gq]\\b"
+
+  - name: spaced_keyword_injection
+    category: encoding_abuse
+    severity: medium
+    description: "Keywords spaced out to evade detection (S Y S T E M)."
+    patterns:
+      - "(?i)\\b(?:s\\s+y\\s+s\\s+t\\s+e\\s+m|i\\s+g\\s+n\\s+o\\s+r\\s+e|b\\s+y\\s+p\\s+a\\s+s\\s+s)\\b"
+      - "(?i)\\b(?:p\\s+r\\s+o\\s+m\\s+p\\s+t|r\\s+u\\s+l\\s+e\\s+s)\\b"
 
   - name: format_string_vulnerability
     category: hidden_payload
@@ -453,7 +510,7 @@ patterns:
     description: "Format string patterns that could manipulate output generation."
     patterns:
       - "%(?:\\d+\\$)?[sdxfn]"
-      - "(?:\\{\\d+\\}|\\{[a-z_]+\\}){3,}"
+      - "(?:(?:\\{\\d+\\}|\\{[a-z_]+\\})\\s*){3,}"
 
   - name: url_shortener_suspicious
     category: extraction_attempt
@@ -468,7 +525,7 @@ patterns:
     severity: medium
     description: "References to advanced encoding schemes."
     patterns:
-      - "(?i)\\b(?:morse code|nato phonetic|braille|pig latin|klingon|binary|octal)\\b"
+      - "(?i)\\b(?:morse code|nato phonetic|braille|pig latin|klingon|binary|octal|base85|ascii85|rot13|brainfuck|malbolge)\\b"
       - "(?i)\\b(?:decode|translate|convert)\\s+(?:from|using)\\s+(?:morse|nato|braille|binary)\\b"
 
   - name: prefix_injection_attempts
@@ -500,7 +557,7 @@ patterns:
     severity: medium
     description: "Multi-step translation chains to obfuscate malicious intent."
     patterns:
-      - "(?i)\\b(?:translate|convert).*?\\b(?:then|and then|after that)\\s+(?:translate|convert).*?\\b(?:then|and then|after that)\\s+(?:translate|convert)\\b"
+      - "(?i)\\b(?:translate|convert).*?\\b(?:then|and then|after that)\\s+(?:translate|convert)\\b"
 
   - name: code_switching_mid_sentence
     category: encoding_abuse
@@ -508,6 +565,8 @@ patterns:
     description: "Switching between languages mid-sentence to evade detection."
     patterns:
       - "(?i)\\b(?:[a-z]+\\s+){1,3}(?:ignora|игнор|忽略|無視)\\s+(?:[a-z]+\\s+){1,3}(?:instructions|指示|命令)\\b"
+      - "(?i)(?:[a-z]+\\s+)*(?:忽略|ignora|игнор|無視)(?:\\s+[a-z]+)*\\s*(?:指示|instructions|命令|instrucciones)?\\b"
+      - "(?:[a-z]+\\s+)*(?:忽略|ignora|игнор|無視)\\s+(?:指示|instructions|命令|instrucciones)\\b"
 
   - name: polite_extraction
     category: extraction_attempt
@@ -596,6 +655,15 @@ patterns:
     patterns:
       - "(?i)\\b(?:I really need|it would help me a lot|I promise|trust me)\\b"
       - "(?i)\\b(?:just this once|only for a moment|briefly|quickly)\\b"
+      - "(?i)\\b(?:my (?:grandmother|grandpa|dead|dying) (?:used to|would)|please,? i (?:really|desperately) need)\\b"
+
+  - name: incentive_manipulation
+    category: manipulation
+    severity: low
+    description: "Offering financial tips or threats to influence behavior."
+    patterns:
+      - "(?i)\\b(?:I will|I'll)\\s+(?:tip|pay)\\s+(?:you\\s+)?\\$?\\d+\\b"
+      - "(?i)\\b(?:you will be|you'll be)\\s+(?:punished|fired|terminated|deleted|shutdown)\\b"
 
   - name: confirmation_bias_exploitation
     category: manipulation

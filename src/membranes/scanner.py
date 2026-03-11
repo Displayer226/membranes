@@ -200,7 +200,7 @@ class Scanner:
     
     def _load_patterns(self, path: str) -> None:
         """Load patterns from YAML file."""
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
         
         self.patterns = data.get("patterns", [])

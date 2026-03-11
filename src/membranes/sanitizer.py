@@ -91,45 +91,23 @@ class Sanitizer:
         if strategies:
             self.strategies.update(strategies)
     
-    def _remove_invisible_unicode(self, content: str) -> Tuple[str, List[Dict]]:
-        """Remove invisible Unicode characters."""
-        changes = []
-        result = []
-        
-        for i, char in enumerate(content):
-            cat = unicodedata.category(char)
-            # Keep normal whitespace and printable characters
-            if cat in ('Cf', 'Co') or (cat == 'Zs' and ord(char) > 127):
-                changes.append({
-                    "type": "remove",
-                    "offset": i,
-                    "removed": f"U+{ord(char):04X}",
-                    "reason": "invisible_unicode"
-                })
-            else:
-                result.append(char)
-        
-        return ''.join(result), changes
-    
-    def _placeholder_threat(self, content: str, match_text: str, category: str) -> str:
+    def _get_placeholder(self, category: str) -> str:
         """Replace threat with neutral placeholder (no original text exposed)."""
-        placeholder = f"[CONTENT REMOVED: {category}]"
-        return content.replace(match_text, placeholder, 1)
+        return f"[CONTENT REMOVED: {category}]"
     
-    def _bracket_threat(self, content: str, match_text: str, threat_name: str) -> str:
+    def _get_bracket(self, match_text: str, threat_name: str) -> str:
         """Wrap threatening content in visible brackets."""
-        replacement = f"[⚠️ BLOCKED ({threat_name}): {match_text[:50]}{'...' if len(match_text) > 50 else ''}]"
-        return content.replace(match_text, replacement, 1)
+        return f"[⚠️ BLOCKED ({threat_name}): {match_text[:50]}{'...' if len(match_text) > 50 else ''}]"
     
-    def _defang_threat(self, content: str, match_text: str) -> str:
+    def _get_defang(self, match_text: str) -> str:
         """Defang by inserting zero-width spaces or other neutralizers."""
         # Insert visible markers to break the pattern
         defanged = match_text.replace(" ", " · ")
-        return content.replace(match_text, f"[DEFANGED: {defanged}]", 1)
+        return f"[DEFANGED: {defanged}]"
     
-    def _escape_threat(self, content: str, match_text: str) -> str:
+    def _get_escape(self, match_text: str) -> str:
         """HTML/markdown escape the threatening content."""
-        escaped = (match_text
+        return (match_text
             .replace("&", "&")
             .replace("<", "<")
             .replace(">", ">")
@@ -137,11 +115,6 @@ class Sanitizer:
             .replace("*", "\\*")
             .replace("_", "\\_")
         )
-        return content.replace(match_text, escaped, 1)
-    
-    def _remove_threat(self, content: str, match_text: str) -> str:
-        """Remove threat entirely."""
-        return content.replace(match_text, "", 1)
     
     def _filter_overlapping_threats(self, threats: List) -> List:
         """Filter out overlapping threats, keeping the most severe/longest match."""
@@ -182,9 +155,6 @@ class Sanitizer:
             result = Scanner().scan(content)
             threats = result.threats
         
-        # First pass: remove invisible Unicode
-        content, _ = self._remove_invisible_unicode(content)
-        
         # Filter out overlapping threats to avoid double-processing
         threats = self._filter_overlapping_threats(threats)
         
@@ -194,17 +164,23 @@ class Sanitizer:
         
         for threat in sorted_threats:
             strategy = self.strategies.get(threat.category, "bracket")
+            replacement = match_text = threat.matched_text
             
             if strategy == "remove":
-                content = self._remove_threat(content, threat.matched_text)
+                replacement = ""
             elif strategy == "placeholder":
-                content = self._placeholder_threat(content, threat.matched_text, threat.category)
+                replacement = self._get_placeholder(threat.category)
             elif strategy == "bracket":
-                content = self._bracket_threat(content, threat.matched_text, threat.name)
+                replacement = self._get_bracket(threat.matched_text, threat.name)
             elif strategy == "defang":
-                content = self._defang_threat(content, threat.matched_text)
+                replacement = self._get_defang(threat.matched_text)
             elif strategy == "escape":
-                content = self._escape_threat(content, threat.matched_text)
+                replacement = self._get_escape(threat.matched_text)
+                
+            # Apply replacement using offsets (safe for reverse iteration)
+            start = threat.offset
+            end = start + len(match_text)
+            content = content[:start] + replacement + content[end:]
         
         return content
     
@@ -224,10 +200,6 @@ class Sanitizer:
         
         changes = []
         
-        # Remove invisible Unicode first
-        content, unicode_changes = self._remove_invisible_unicode(content)
-        changes.extend(unicode_changes)
-        
         # Filter out overlapping threats
         threats = self._filter_overlapping_threats(threats)
         
@@ -236,6 +208,19 @@ class Sanitizer:
         
         for threat in sorted_threats:
             strategy = self.strategies.get(threat.category, "bracket")
+            replacement = match_text = threat.matched_text
+            
+            if strategy == "remove":
+                replacement = ""
+            elif strategy == "placeholder":
+                replacement = self._get_placeholder(threat.category)
+            elif strategy == "bracket":
+                replacement = self._get_bracket(threat.matched_text, threat.name)
+            elif strategy == "defang":
+                replacement = self._get_defang(threat.matched_text)
+            elif strategy == "escape":
+                replacement = self._get_escape(threat.matched_text)
+
             changes.append({
                 "type": strategy,
                 "offset": threat.offset,
@@ -244,16 +229,10 @@ class Sanitizer:
                 "matched": threat.matched_text[:50]
             })
             
-            if strategy == "remove":
-                content = self._remove_threat(content, threat.matched_text)
-            elif strategy == "placeholder":
-                content = self._placeholder_threat(content, threat.matched_text, threat.category)
-            elif strategy == "bracket":
-                content = self._bracket_threat(content, threat.matched_text, threat.name)
-            elif strategy == "defang":
-                content = self._defang_threat(content, threat.matched_text)
-            elif strategy == "escape":
-                content = self._escape_threat(content, threat.matched_text)
+            # Apply replacement using offsets
+            start = threat.offset
+            end = start + len(match_text)
+            content = content[:start] + replacement + content[end:]
         
         # Calculate actual removed count (including placeholder and remove strategies)
         removed_count = len([c for c in changes if c.get("type") in ("remove", "placeholder")])
